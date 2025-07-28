@@ -1,0 +1,3 @@
+[submodule "external/mlir"]
+	path = external/mlir
+	url = https://github.com/nodreambird/llvm-project.git
