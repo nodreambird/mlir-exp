@@ -1,5 +1,5 @@
 {
-  description = "Development environment with GCC 11, Clang, Ninja, Git, CMake, LLD, ccache, libstdc++, and Vim";
+  description = "Dev shell for MLIR/NBAI project";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -9,41 +9,56 @@
   outputs = { self, nixpkgs, flake-utils }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        pkgs = import nixpkgs {
-          inherit system;
-        };
+        pkgs = import nixpkgs { inherit system; };
+        llvmPkgs = pkgs.llvmPackages_18; # or _17 if you need that version
+        llvm = llvmPkgs.llvm;
+        clang = llvmPkgs.clang;
+        mlir = llvmPkgs.mlir;
       in
       {
-        devShell = pkgs.mkShell {
-          buildInputs = [
-            pkgs.gcc11
-            pkgs.gcc11Stdenv
-            pkgs.clang
-            pkgs.llvmPackages_latest.clang-unwrapped
-            pkgs.ninja
-            pkgs.git
-            pkgs.vim
+        devShells.default = pkgs.mkShell {
+          packages = [
+            clang
+            llvm
+            mlir
             pkgs.cmake
+            pkgs.ninja
             pkgs.lld
+            pkgs.git
             pkgs.ccache
-            pkgs.stdenv.cc.cc.lib
-            pkgs.zlib
+            pkgs.python3
+            pkgs.vim
           ];
 
-          shellHook = ''
-            export CC="${pkgs.gcc11}/bin/gcc-11"
-            export CXX="${pkgs.gcc11}/bin/g++-11"
-            export CLANG="${pkgs.llvmPackages_latest.clang-unwrapped}/bin/clang"
-            export CLANGXX="${pkgs.llvmPackages_latest.clang-unwrapped}/bin/clang++"
-            export NINJA="${pkgs.ninja}/bin/ninja"
-            export GIT="${pkgs.git}/bin/git"
-            export VIM="${pkgs.vim}/bin/vim"
-            export CMAKE="${pkgs.cmake}/bin/cmake"
-            export LLD="${pkgs.lld}/bin/lld"
-	    export LD_LIBRARY_PATH=${pkgs.lib.makeLibraryPath [pkgs.stdenv.cc.cc]}
+          # Help CMake find LLVM+MLIR automatically
+          # (you can omit -DLLVM_DIR/-DMLIR_DIR if CMake respects CMAKE_PREFIX_PATH)
+          CMAKE_PREFIX_PATH = pkgs.lib.makeSearchPath "lib/cmake" [
+            llvm.dev
+            mlir.dev
+          ];
 
-            echo "GCC 11, Clang, Ninja, Git, CMake, LLD, ccache, libstdc++, and Vim are available in this shell."
+          # Make it explicit too (nice for clarity/logs)
+          LLVM_DIR = "${llvm.dev}/lib/cmake/llvm";
+          MLIR_DIR = "${mlir.dev}/lib/cmake/mlir";
+
+          # Use clang toolchain by default
+          CC = "${clang}/bin/clang";
+          CXX = "${clang}/bin/clang++";
+          LD = "${pkgs.lld}/bin/ld.lld";
+
+          shellHook = ''
+            echo "🔧 MLIR dev shell ready"
+            echo "  LLVM_DIR=$LLVM_DIR"
+            echo "  MLIR_DIR=$MLIR_DIR"
+            echo "  CC=$CC"
+            echo "  CXX=$CXX"
+            echo "Tip: from your project root, run:
+              cmake -G Ninja -S . -B build \
+                -DCMAKE_BUILD_TYPE=RelWithDebInfo
+              cmake --build build -j
+            "
           '';
         };
       });
 }
+
